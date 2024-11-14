@@ -3,19 +3,12 @@ import json
 from flask import Flask, request, jsonify
 import firebase_admin
 from firebase_admin import auth, firestore, credentials
-from flask_cors import CORS
+from flask_cors import CORS  # Import CORS
 
 app = Flask(__name__)
 
-
-origins = [
-    'https://nutri-wise.vercel.app',
-    'https://nutri-wise-lq7zew6rf-layyyths-projects.vercel.app',
-    'https://whippet-just-endlessly.ngrok-free.app'  # Include the ngrok URL
-]
-
-# Configure CORS for the /predict endpoint
-CORS(app, resources={r"/predict": {"origins": origins, "methods": ["GET", "POST", "OPTIONS"]}})
+# Enable CORS for all routes
+CORS(app)
 
 # Load Firebase credentials from the FIREBASE_CREDENTIALS environment variable
 firebase_credentials_json = os.getenv("FIREBASE_CREDENTIALS")
@@ -37,14 +30,14 @@ def google_signin():
     id_token = request.json.get("idToken")
 
     try:
-        # Verifying the token 
+        # Verifying the token
         decoded_token = auth.verify_id_token(id_token)
         user_id = decoded_token["uid"]
 
         user_info = {
             "uid": user_id,
             "email": decoded_token.get("email"),
-            "display_name": decoded_token.get("name"),  # Fixed typo here
+            "display_name": decoded_token.get("name"),
             "photo_url": decoded_token.get("picture"),
         }
 
@@ -58,7 +51,6 @@ def google_signin():
 
 @app.route("/user/<user_id>", methods=["GET"])
 def get_user(user_id):
-    # Retrieve user data
     try:
         user_doc = db.collection("users").document(user_id).get()
         if user_doc.exists:
@@ -81,4 +73,3 @@ def update_user(user_id):
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
-
