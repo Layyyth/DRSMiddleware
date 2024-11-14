@@ -3,7 +3,7 @@ import json
 from flask import Flask, request, jsonify
 import firebase_admin
 from firebase_admin import auth, firestore, credentials
-from flask_cors import CORS
+from flask_cors import CORS  # Import CORS
 
 app = Flask(__name__)
 
@@ -14,25 +14,8 @@ origins = [
     'https://whippet-just-endlessly.ngrok-free.app'  # Include the ngrok URL
 ]
 
-# Enable CORS globally
-CORS(app, resources={r"/*": {"origins": origins}})
-
-# Ensure OPTIONS preflight requests are handled
-@app.route('/auth/google-signin', methods=['OPTIONS'])
-def handle_options_google_signin():
-    response = jsonify({"message": "OK"})
-    response.headers.add('Access-Control-Allow-Origin', ', '.join(origins))
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    return response
-
-@app.route('/predict', methods=['OPTIONS'])
-def handle_options_predict():
-    response = jsonify({"message": "OK"})
-    response.headers.add('Access-Control-Allow-Origin', ', '.join(origins))
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    return response
+# Configure CORS for the /predict endpoint
+CORS(app, resources={r"/predict": {"origins": origins, "methods": ["GET", "POST", "OPTIONS"]}})
 
 # Load Firebase credentials from the FIREBASE_CREDENTIALS environment variable
 firebase_credentials_json = os.getenv("FIREBASE_CREDENTIALS")
