@@ -3,6 +3,9 @@ import json
 from flask import Flask, request, jsonify
 import firebase_admin
 from firebase_admin import auth, firestore, credentials
+import google.auth
+from google.auth.transport.requests import Request
+from google.oauth2.id_token import verify_oauth2_token
 from flask_cors import CORS  # Import CORS
 
 app = Flask(__name__)
@@ -50,15 +53,22 @@ firebase_admin.initialize_app(cred)
 # Initialize Firestore
 db = firestore.client()
 
+# Google OAuth Client ID
+GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+
 @app.route("/auth/google-signin", methods=["POST"])
 def google_signin():
     id_token = request.json.get("idToken")
 
-    try:
-        # Verifying the token
-        decoded_token = auth.verify_id_token(id_token)
-        user_id = decoded_token["uid"]
+    if not id_token:
+        return jsonify({"error": "No idToken provided"}), 400
 
+    try:
+        # Verify the idToken using Google OAuth's method
+        decoded_token = verify_oauth2_token(id_token, Request(), GOOGLE_CLIENT_ID)
+
+        # User info extracted from the decoded token
+        user_id = decoded_token["sub"]
         user_info = {
             "uid": user_id,
             "email": decoded_token.get("email"),
@@ -66,8 +76,10 @@ def google_signin():
             "photo_url": decoded_token.get("picture"),
         }
 
-        # Store user in Firestore
+        # Store user in Firestore (or update if exists)
         db.collection("users").document(user_id).set(user_info, merge=True)
+        
+        # Return the response with user info
         return jsonify({"message": "User signed in successfully", "user": user_info}), 200
 
     except Exception as e:
