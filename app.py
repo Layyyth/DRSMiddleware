@@ -3,7 +3,6 @@ import json
 from flask import Flask, request, jsonify
 import firebase_admin
 from firebase_admin import auth, firestore, credentials
-import google.auth
 from google.auth.transport.requests import Request
 from google.oauth2.id_token import verify_oauth2_token
 from flask_cors import CORS  # Import CORS
@@ -56,35 +55,45 @@ db = firestore.client()
 # Google OAuth Client ID
 GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
 
+# Middleware to verify the ID token
+def verify_oauth_middleware(func):
+    def wrapper(*args, **kwargs):
+        # Extract the idToken from the request JSON
+        id_token = request.json.get("idToken")
+        if not id_token:
+            return jsonify({"error": "No idToken provided"}), 400
+
+        try:
+            # Verify the idToken using Google's method
+            decoded_token = verify_oauth2_token(id_token, Request(), GOOGLE_CLIENT_ID)
+            request.user_info = decoded_token  # Attach user info to the request
+
+        except Exception as e:
+            print("Error verifying ID token:", e)
+            return jsonify({"error": "Authentication failed"}), 401
+
+        return func(*args, **kwargs)  # Continue with the request
+
+    return wrapper
+
 @app.route("/auth/google-signin", methods=["POST"])
+@verify_oauth_middleware  # Apply the middleware here
 def google_signin():
-    id_token = request.json.get("idToken")
+    user_info = request.user_info  # This comes from the middleware
+    user_id = user_info["sub"]
+    
+    # Create a user info dictionary to store in Firestore
+    user_data = {
+        "uid": user_id,
+        "email": user_info.get("email"),
+        "display_name": user_info.get("name"),
+        "photo_url": user_info.get("picture"),
+    }
 
-    if not id_token:
-        return jsonify({"error": "No idToken provided"}), 400
+    # Store user in Firestore (or update if exists)
+    db.collection("users").document(user_id).set(user_data, merge=True)
 
-    try:
-        # Verify the idToken using Google OAuth's method
-        decoded_token = verify_oauth2_token(id_token, Request(), GOOGLE_CLIENT_ID)
-
-        # User info extracted from the decoded token
-        user_id = decoded_token["sub"]
-        user_info = {
-            "uid": user_id,
-            "email": decoded_token.get("email"),
-            "display_name": decoded_token.get("name"),
-            "photo_url": decoded_token.get("picture"),
-        }
-
-        # Store user in Firestore (or update if exists)
-        db.collection("users").document(user_id).set(user_info, merge=True)
-        
-        # Return the response with user info
-        return jsonify({"message": "User signed in successfully", "user": user_info}), 200
-
-    except Exception as e:
-        print("Error verifying ID token:", e)
-        return jsonify({"error": "Authentication failed"}), 401
+    return jsonify({"message": "User signed in successfully", "user": user_data}), 200
 
 @app.route("/user/<user_id>", methods=["GET"])
 def get_user(user_id):
