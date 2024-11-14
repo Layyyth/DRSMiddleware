@@ -14,8 +14,26 @@ origins = [
     'https://whippet-just-endlessly.ngrok-free.app'  # Include the ngrok URL
 ]
 
-# Configure CORS for the /predict endpoint
-CORS(app, resources={r"/predict": {"origins": origins, "methods": ["GET", "POST", "OPTIONS"]}})
+# Configure CORS for the /auth/google-signin endpoint and any other required routes
+CORS(app, resources={r"/auth/google-signin": {"origins": origins, "methods": ["POST", "OPTIONS"]}})
+CORS(app, resources={r"/user/*": {"origins": origins, "methods": ["GET", "PUT", "OPTIONS"]}})
+
+# Handle OPTIONS requests for specific routes
+@app.route('/auth/google-signin', methods=['OPTIONS'])
+def handle_options_google_signin():
+    response = jsonify({"message": "OK"})
+    response.headers.add('Access-Control-Allow-Origin', ', '.join(origins))
+    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+    return response
+
+@app.route('/user/<user_id>', methods=['OPTIONS'])
+def handle_options_user(user_id):
+    response = jsonify({"message": "OK"})
+    response.headers.add('Access-Control-Allow-Origin', ', '.join(origins))
+    response.headers.add('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+    return response
 
 # Load Firebase credentials from the FIREBASE_CREDENTIALS environment variable
 firebase_credentials_json = os.getenv("FIREBASE_CREDENTIALS")
