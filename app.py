@@ -7,8 +7,15 @@ from flask_cors import CORS  # Import CORS
 
 app = Flask(__name__)
 
-# Enable CORS for all routes
-CORS(app)
+# Specify the allowed origins for CORS
+origins = [
+    'https://nutri-wise.vercel.app',
+    'https://nutri-wise-lq7zew6rf-layyyths-projects.vercel.app',
+    'https://whippet-just-endlessly.ngrok-free.app'  # Include the ngrok URL
+]
+
+# Configure CORS for the /predict endpoint
+CORS(app, resources={r"/predict": {"origins": origins, "methods": ["GET", "POST", "OPTIONS"]}})
 
 # Load Firebase credentials from the FIREBASE_CREDENTIALS environment variable
 firebase_credentials_json = os.getenv("FIREBASE_CREDENTIALS")
