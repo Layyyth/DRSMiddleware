@@ -3,8 +3,19 @@ import json
 from flask import Flask, request, jsonify
 import firebase_admin
 from firebase_admin import auth, firestore, credentials
+from flask_cors import CORS
 
 app = Flask(__name__)
+
+
+origins = [
+    'https://nutri-wise.vercel.app',
+    'https://nutri-wise-lq7zew6rf-layyyths-projects.vercel.app',
+    'https://whippet-just-endlessly.ngrok-free.app'  # Include the ngrok URL
+]
+
+# Configure CORS for the /predict endpoint
+CORS(app, resources={r"/predict": {"origins": origins, "methods": ["GET", "POST", "OPTIONS"]}})
 
 # Load Firebase credentials from the FIREBASE_CREDENTIALS environment variable
 firebase_credentials_json = os.getenv("FIREBASE_CREDENTIALS")
