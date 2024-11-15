@@ -1,8 +1,9 @@
 import os
 import json
 from flask import Flask, request, jsonify
+import requests
 import firebase_admin
-from firebase_admin import auth, firestore, credentials
+from firebase_admin import firestore, credentials
 from google.auth.transport.requests import Request
 from google.oauth2.id_token import verify_oauth2_token
 from flask_cors import CORS  # Import CORS
@@ -52,10 +53,7 @@ firebase_admin.initialize_app(cred)
 # Initialize Firestore
 db = firestore.client()
 
-# Google OAuth Client ID
-GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
-
-# Middleware to verify the ID token
+# Middleware to verify the ID token using Google's public certificates
 def verify_oauth_middleware(func):
     def wrapper(*args, **kwargs):
         # Extract the idToken from the request JSON
@@ -64,9 +62,17 @@ def verify_oauth_middleware(func):
             return jsonify({"error": "No idToken provided"}), 400
 
         try:
-            # Verify the idToken using Google's method
-            decoded_token = verify_oauth2_token(id_token, Request(), GOOGLE_CLIENT_ID)
-            request.user_info = decoded_token  # Attach user info to the request
+            # Fetch Google's public certificates
+            GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v1/certs"
+            response = requests.get(GOOGLE_CERTS_URL)
+            response.raise_for_status()
+            google_certs = response.json()
+
+            # Verify the idToken using the fetched certificates
+            decoded_token = verify_oauth2_token(id_token, Request(), certs=google_certs)
+
+            # Attach user info to the request for further processing
+            request.user_info = decoded_token
 
         except Exception as e:
             print("Error verifying ID token:", e)
