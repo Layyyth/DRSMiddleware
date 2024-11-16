@@ -8,27 +8,30 @@ from google.oauth2.id_token import verify_oauth2_token
 
 app = Flask(__name__)
 
-# Load Firebase credentials from a local file for testing
-firebase_credentials_path = "/Users/layth/Documents/Developer/Backend + middleware/Nutriwise Firebase Admin SDK.json"  # Replace with your local file path
-if not os.path.exists(firebase_credentials_path):
-    raise FileNotFoundError(f"Firebase credentials file not found at {firebase_credentials_path}")
+# Load Firebase credentials from an environment variable
+firebase_credentials_json = os.getenv("FIREBASE_CREDENTIALS")
+if firebase_credentials_json is None:
+    raise ValueError("FIREBASE_CREDENTIALS environment variable not set.")
+
+# Parse the Firebase credentials JSON string to a Python dictionary
+firebase_credentials_dict = json.loads(firebase_credentials_json)
 
 # Initialize Firebase Admin SDK
-with open(firebase_credentials_path) as f:
-    firebase_credentials_dict = json.load(f)
-
 cred = credentials.Certificate(firebase_credentials_dict)
 initialize_app(cred)
 
 # Initialize Firestore
 db = firestore.client()
 
-# Google OAuth details for local testing
-GOOGLE_CLIENT_ID = "15533879398-8pj96ktlsrh1m893b6khen4t11e6cv4e.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET = "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"
-REDIRECT_URI = "http://127.0.0.1:5001/auth/google-callback"
+# Google OAuth details (retrieved from environment variables)
+GOOGLE_CLIENT_ID = os.getenv("Google_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("Google_secret")
+REDIRECT_URI = os.getenv("REDIRECT_URI", "https://your-live-app.com/auth/google-callback")
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+
+if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+    raise ValueError("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET environment variable not set.")
 
 # Route to initiate Google OAuth flow
 @app.route("/auth/google", methods=["GET"])
@@ -76,27 +79,24 @@ def google_callback():
         user_name = decoded_token.get("name")
         user_picture = decoded_token.get("picture")
 
-        # Log the decoded token for debugging
-        print("Decoded Token:", decoded_token)
-
         # Store user in Firestore (or update if exists)
         user_data = {
             "uid": user_id,
             "email": user_email,
-            "displayName": user_name,
-            "photoURL": user_picture,
+            "display_name": user_name,
+            "photo_url": user_picture,
         }
-        db.collection("accounts").document(user_id).set(user_data, merge=True)
+        db.collection("users").document(user_id).set(user_data, merge=True)
 
         # Return user info to the frontend
         return jsonify({"message": "User signed in successfully", "user": user_data}), 200
 
     except Exception as e:
-        # Log the error for debugging
+        # Log the error for debugging in production
         print("Error during Google callback:", e)
         return jsonify({"error": "Failed to authenticate with Google", "message": str(e)}), 500
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="127.0.0.1", port=5001)
+    app.run(debug=False, host="0.0.0.0", port=int(os.getenv("PORT", 5001)))
 
