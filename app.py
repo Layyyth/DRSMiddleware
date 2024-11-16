@@ -1,129 +1,102 @@
 import os
 import json
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect
 import requests
-import firebase_admin
-from firebase_admin import firestore, credentials
+from firebase_admin import credentials, initialize_app, firestore
 from google.auth.transport.requests import Request
 from google.oauth2.id_token import verify_oauth2_token
-from flask_cors import CORS  # Import CORS
 
 app = Flask(__name__)
 
-# Specify the allowed origins for CORS
-origins = [
-    'https://nutri-wise.vercel.app',
-    'https://nutri-wise-lq7zew6rf-layyyths-projects.vercel.app',
-    'https://whippet-just-endlessly.ngrok-free.app'  # Include the ngrok URL
-]
+# Load Firebase credentials from a local file for testing
+firebase_credentials_path = "/Users/layth/Documents/Developer/Backend + middleware/Nutriwise Firebase Admin SDK.json"  # Replace with your local file path
+if not os.path.exists(firebase_credentials_path):
+    raise FileNotFoundError(f"Firebase credentials file not found at {firebase_credentials_path}")
 
-# Configure CORS for the /auth/google-signin endpoint and any other required routes
-CORS(app, resources={r"/auth/google-signin": {"origins": origins, "methods": ["POST", "OPTIONS"]}})
-CORS(app, resources={r"/user/*": {"origins": origins, "methods": ["GET", "PUT", "OPTIONS"]}})
+# Initialize Firebase Admin SDK
+with open(firebase_credentials_path) as f:
+    firebase_credentials_dict = json.load(f)
 
-# Handle OPTIONS requests for specific routes
-@app.route('/auth/google-signin', methods=['OPTIONS'])
-def handle_options_google_signin():
-    response = jsonify({"message": "OK"})
-    response.headers.add('Access-Control-Allow-Origin', ', '.join(origins))
-    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    return response
-
-@app.route('/user/<user_id>', methods=['OPTIONS'])
-def handle_options_user(user_id):
-    response = jsonify({"message": "OK"})
-    response.headers.add('Access-Control-Allow-Origin', ', '.join(origins))
-    response.headers.add('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    return response
-
-# Load Firebase credentials from the FIREBASE_CREDENTIALS environment variable
-firebase_credentials_json = os.getenv("FIREBASE_CREDENTIALS")
-if firebase_credentials_json is None:
-    raise ValueError("FIREBASE_CREDENTIALS environment variable not set.")
-
-# Parse the JSON string to a Python dictionary
-firebase_credentials_dict = json.loads(firebase_credentials_json)
-
-# Initialize Firebase with the credentials dictionary
 cred = credentials.Certificate(firebase_credentials_dict)
-firebase_admin.initialize_app(cred)
+initialize_app(cred)
 
 # Initialize Firestore
 db = firestore.client()
 
-# Middleware to verify the ID token using Google's public certificates
-def verify_oauth_middleware(func):
-    def wrapper(*args, **kwargs):
-        # Extract the idToken from the request JSON
-        id_token = request.json.get("idToken")
+# Google OAuth details for local testing
+GOOGLE_CLIENT_ID = "15533879398-8pj96ktlsrh1m893b6khen4t11e6cv4e.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "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"
+REDIRECT_URI = "http://127.0.0.1:5001/auth/google-callback"
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+
+# Route to initiate Google OAuth flow
+@app.route("/auth/google", methods=["GET"])
+def google_auth():
+    # Generate URL for Google's OAuth authorization endpoint
+    auth_url = (
+        f"{GOOGLE_AUTH_URL}?"
+        f"client_id={GOOGLE_CLIENT_ID}&"
+        f"redirect_uri={REDIRECT_URI}&"
+        f"response_type=code&"
+        f"scope=email profile"
+    )
+    return redirect(auth_url)
+
+# Route to handle the callback from Google
+@app.route("/auth/google-callback", methods=["GET"])
+def google_callback():
+    # Extract the authorization code from the request
+    auth_code = request.args.get("code")
+    if not auth_code:
+        return jsonify({"error": "Authorization code not found."}), 400
+
+    try:
+        # Exchange the authorization code for tokens
+        token_data = {
+            "code": auth_code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
+        token_response = requests.post(GOOGLE_TOKEN_URL, data=token_data)
+        token_response.raise_for_status()
+        tokens = token_response.json()
+        id_token = tokens.get("id_token")
+        access_token = tokens.get("access_token")
+
         if not id_token:
-            return jsonify({"error": "No idToken provided"}), 400
+            return jsonify({"error": "ID Token not received."}), 400
 
-        try:
-            # Fetch Google's public certificates
-            GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v1/certs"
-            response = requests.get(GOOGLE_CERTS_URL)
-            response.raise_for_status()
-            google_certs = response.json()
+        # Verify the ID Token
+        decoded_token = verify_oauth2_token(id_token, Request())
+        user_id = decoded_token.get("sub")
+        user_email = decoded_token.get("email")
+        user_name = decoded_token.get("name")
+        user_picture = decoded_token.get("picture")
 
-            # Verify the idToken using the fetched certificates
-            decoded_token = verify_oauth2_token(id_token, Request(), certs=google_certs)
+        # Log the decoded token for debugging
+        print("Decoded Token:", decoded_token)
 
-            # Attach user info to the request for further processing
-            request.user_info = decoded_token
+        # Store user in Firestore (or update if exists)
+        user_data = {
+            "uid": user_id,
+            "email": user_email,
+            "displayName": user_name,
+            "photoURL": user_picture,
+        }
+        db.collection("accounts").document(user_id).set(user_data, merge=True)
 
-        except Exception as e:
-            print("Error verifying ID token:", e)
-            return jsonify({"error": "Authentication failed"}), 401
+        # Return user info to the frontend
+        return jsonify({"message": "User signed in successfully", "user": user_data}), 200
 
-        return func(*args, **kwargs)  # Continue with the request
-
-    return wrapper
-
-@app.route("/auth/google-signin", methods=["POST"])
-@verify_oauth_middleware  # Apply the middleware here
-def google_signin():
-    user_info = request.user_info  # This comes from the middleware
-    user_id = user_info["sub"]
-    
-    # Create a user info dictionary to store in Firestore
-    user_data = {
-        "uid": user_id,
-        "email": user_info.get("email"),
-        "display_name": user_info.get("name"),
-        "photo_url": user_info.get("picture"),
-    }
-
-    # Store user in Firestore (or update if exists)
-    db.collection("users").document(user_id).set(user_data, merge=True)
-
-    return jsonify({"message": "User signed in successfully", "user": user_data}), 200
-
-@app.route("/user/<user_id>", methods=["GET"])
-def get_user(user_id):
-    try:
-        user_doc = db.collection("users").document(user_id).get()
-        if user_doc.exists:
-            return jsonify(user_doc.to_dict()), 200
-        else:
-            return jsonify({"error": "User not found!"}), 404
     except Exception as e:
-        print("Error retrieving user:", e)
-        return jsonify({"error": "Failed to retrieve user"}), 500
+        # Log the error for debugging
+        print("Error during Google callback:", e)
+        return jsonify({"error": "Failed to authenticate with Google", "message": str(e)}), 500
 
-@app.route("/user/<user_id>", methods=["PUT"])
-def update_user(user_id):
-    updated_data = request.json
-    try:
-        db.collection("users").document(user_id).update(updated_data)
-        return jsonify({"message": "User updated successfully"}), 200
-    except Exception as e:
-        print("Error updating user info:", e)
-        return jsonify({"error": "Failed to update user"}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
-
+    app.run(debug=True, host="127.0.0.1", port=5001)
 
