@@ -26,7 +26,7 @@ db = firestore.client()
 # Google OAuth details (retrieved from environment variables)
 GOOGLE_CLIENT_ID = os.getenv("Google_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("Google_secret")
-REDIRECT_URI = os.getenv("REDIRECT_URI", "https://your-live-app.com/auth/google-callback")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 
@@ -83,10 +83,10 @@ def google_callback():
         user_data = {
             "uid": user_id,
             "email": user_email,
-            "display_name": user_name,
-            "photo_url": user_picture,
+            "displayName": user_name,
+            "photoURL": user_picture,
         }
-        db.collection("users").document(user_id).set(user_data, merge=True)
+        db.collection("accounts").document(user_id).set(user_data, merge=True)
 
         # Return user info to the frontend
         return jsonify({"message": "User signed in successfully", "user": user_data}), 200
