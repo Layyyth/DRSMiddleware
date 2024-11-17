@@ -1,6 +1,7 @@
 import os
 import json
 from flask import Flask, request, jsonify, redirect
+from flask_cors import CORS
 import requests
 from firebase_admin import credentials, initialize_app, firestore
 from google.auth.transport.requests import Request
