@@ -8,7 +8,7 @@ from google.oauth2.id_token import verify_oauth2_token
 
 app = Flask(__name__)
 
-CORS(app, resources={r"/*": {"origins": "https://your-frontend.com"}})
+CORS(app, resources={r"/*": {"origins": "https://nutri-wise.vercel.app/"}})
 
 
 # Load Firebase credentials from an environment variable
