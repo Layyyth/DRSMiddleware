@@ -8,6 +8,9 @@ from google.oauth2.id_token import verify_oauth2_token
 
 app = Flask(__name__)
 
+CORS(app, resources={r"/*": {"origins": "https://your-frontend.com"}})
+
+
 # Load Firebase credentials from an environment variable
 firebase_credentials_json = os.getenv("FIREBASE_CREDENTIALS")
 if firebase_credentials_json is None:
