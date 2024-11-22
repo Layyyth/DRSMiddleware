@@ -55,6 +55,7 @@ def google_auth():
 def google_callback():
     # Extract the authorization code from the request
     auth_code = request.args.get("code")
+    redirect_url = request.args.get("https://diet-recommendation-system-layth.vercel.app/info")
     if not auth_code:
         return jsonify({"error": "Authorization code not found."}), 400
 
@@ -92,8 +93,13 @@ def google_callback():
         }
         db.collection("accounts").document(user_id).set(user_data, merge=True)
 
+
         # Return user info to the frontend
-        return jsonify({"message": "User signed in successfully", "user": user_data}), 200
+        if redirect_url:
+            return redirect(redirect_url)
+        else:
+            # Fallback response if no redirect is provided
+            return jsonify({"message": "User signed in successfully", "user": user_data}), 200
 
     except Exception as e:
         # Log the error for debugging in production
