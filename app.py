@@ -94,7 +94,9 @@ def google_callback():
         }
         db.collection("accounts").document(user_id).set(user_data, merge=True)
 
-        redirect_url = f"https://diet-recommendation-system-layth.vercel.app/?key={session_key}"
+        #redirect_url = f"https://diet-recommendation-system-layth.vercel.app/?key={session_key}"
+        redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/?key={session_key}"
+
         return redirect(redirect_url)
 
     except Exception as e:
