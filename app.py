@@ -1,10 +1,11 @@
+from logging import exception
 import os
 import json
 import uuid
 from flask import Flask, request, jsonify, redirect
 from flask_cors import CORS
 import requests
-from firebase_admin import credentials, initialize_app, firestore
+from firebase_admin import credentials, initialize_app, firestore, auth
 from google.auth.transport.requests import Request
 from google.oauth2.id_token import verify_oauth2_token
 
@@ -94,7 +95,6 @@ def google_callback():
         }
         db.collection("accounts").document(user_id).set(user_data, merge=True)
 
-        #redirect_url = f"https://diet-recommendation-system-layth.vercel.app/?key={session_key}"
         redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/?key={session_key}"
 
         return redirect(redirect_url)
@@ -102,6 +102,50 @@ def google_callback():
     except Exception as e:
         print("Error during Google callback:", e)
         return jsonify({"error": "Failed to authenticate with Google", "message": str(e)}), 500
+
+@app.route("/auth/create-user", methods=["POST"])
+def create_account():
+    try:
+        data = request.json
+        name = data.get("displayName")
+        email = data.get("email")
+        password = data.get("password")
+        photo_url = data.get("photoURL")
+
+        if not name or not email or not password:
+            return jsonify({"error": "Name, email, and password are required"}), 400
+
+        # Generate a session key
+        session_key = generate_session_key()
+
+        # Create user in Firebase Authentication
+        firebase_user = auth.create_user(
+            email=email,
+            password=password,
+        )
+
+        # Create document in Firestore
+        user_data = {
+            "uid": firebase_user.uid,
+            "email": email,
+            "displayName": name,
+            "photoURL": photo_url,
+            "sessionKey": session_key,  # Save session key to Firestore
+        }
+
+        db.collection("accounts").document(firebase_user.uid).set(user_data)
+
+        # Return the session key and user info to the frontend
+        return jsonify({
+            "message": "Account Created Successfully",
+            "user": user_data,
+            "sessionKey": session_key
+        }), 201
+
+    except Exception as e:
+        print("Error Creating Account", e)
+        return jsonify({"error": "Failed to create account", "message": str(e)}), 500
+
 
 # New Endpoint: Fetch user data by session key
 @app.route("/auth/fetch-user", methods=["POST"])
@@ -129,7 +173,6 @@ def fetch_user_data():
     except Exception as e:
         print("Error fetching user data:", e)
         return jsonify({"error": "Failed to fetch user data", "message": str(e)}), 500
-
 
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0", port=int(os.getenv("PORT", 5001)))
