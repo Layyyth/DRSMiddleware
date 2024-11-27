@@ -1,4 +1,3 @@
-from http.client import NON_AUTHORITATIVE_INFORMATION
 from logging import exception
 import os
 import json
@@ -87,16 +86,34 @@ def google_callback():
 
         session_key = generate_session_key()
 
-        user_data = {
-            "uid": user_id,
-            "email": user_email,
-            "displayName": user_name,
-            "photoURL": user_picture,
-            "sessionKey": session_key,
-        }
-        db.collection("accounts").document(user_id).set(user_data, merge=True)
+        # Fetch user data from Firestore
+        user_ref = db.collection("accounts").document(user_id)
+        user_doc = user_ref.get()
+        if user_doc.exists:
+            # If user exists, check if NutriInfo is present
+            user_data = user_doc.to_dict()
+            user_data["sessionKey"] = session_key  # Update session key
+            user_ref.update({"sessionKey": session_key})  # Save updated session key
 
-        redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/?key={session_key}"
+            # Redirect based on NutriInfo availability
+            if "NutriInfo" in user_data:
+                # NutriInfo exists, redirect to dashboard
+                redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/dashboard?key={session_key}"
+            else:
+                # NutriInfo missing, redirect to info page
+                redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/info?key={session_key}"
+        else:
+            # Create new user if not exists
+            user_data = {
+                "uid": user_id,
+                "email": user_email,
+                "displayName": user_name,
+                "photoURL": user_picture,
+                "sessionKey": session_key,
+            }
+            user_ref.set(user_data)
+            # Redirect to info page for new users
+            redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/info?key={session_key}"
 
         return redirect(redirect_url)
 
@@ -119,7 +136,26 @@ def create_account():
         # Check if the user already exists in Firebase Authentication
         try:
             existing_user = auth.get_user_by_email(email)
-            return jsonify({"error": "Account already exists"}), 409
+            # Fetch the user's document
+            user_ref = db.collection("accounts").document(existing_user.uid)
+            user_doc = user_ref.get()
+
+            if user_doc.exists:
+                # Redirect based on NutriInfo availability
+                user_data = user_doc.to_dict()
+                session_key = generate_session_key()
+                user_ref.update({"sessionKey": session_key})  # Update session key
+                if "NutriInfo" in user_data:
+                    # NutriInfo exists, redirect to dashboard
+                    return jsonify({
+                        "redirect": f"https://whippet-just-endlessly.ngrok-free.app/dashboard?key={session_key}"
+                    }), 200
+                else:
+                    # NutriInfo missing, redirect to info page
+                    return jsonify({
+                        "redirect": f"https://whippet-just-endlessly.ngrok-free.app/info?key={session_key}"
+                    }), 200
+
         except auth.UserNotFoundError:
             pass  # Continue to create the account if the user is not found
 
@@ -143,75 +179,14 @@ def create_account():
 
         db.collection("accounts").document(firebase_user.uid).set(user_data)
 
-        # Return the session key and user info to the frontend
+        # Redirect to info page for new users
         return jsonify({
-            "message": "Account Created Successfully",
-            "user": user_data,
-            "sessionKey": session_key
+            "redirect": f"https://whippet-just-endlessly.ngrok-free.app/info?key={session_key}"
         }), 201
 
     except Exception as e:
         print("Error Creating Account", e)
         return jsonify({"error": "Failed to create account", "message": str(e)}), 500
-
-@app.route("/auth/login-with-pass", methods=["POST"])
-def login_user():
-    try:
-        data = request.json
-        email = data.get("email")
-        password = data.get("password")
-
-        if not email or not password:
-            return jsonify({"error": "Email and password are required"}), 400
-
-        # Firebase REST API Endpoint for password authentication
-        FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key="
-
-        # Firebase Web API Key (retrieved from your Firebase project settings)
-        FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY")
-        if not FIREBASE_WEB_API_KEY:
-            return jsonify({"error": "Firebase Web API Key is not configured"}), 500
-
-        # Make a POST request to Firebase Authentication REST API
-        auth_payload = {
-            "email": email,
-            "password": password,
-            "returnSecureToken": True
-        }
-
-        response = requests.post(FIREBASE_AUTH_URL + FIREBASE_WEB_API_KEY, json=auth_payload)
-
-        if response.status_code != 200:
-            # If Firebase REST API returns an error, pass it to the frontend
-            error_message = response.json().get("error", {}).get("message", "Authentication failed")
-            return jsonify({"error": "Invalid email or password", "details": error_message}), 401
-
-        # Parse the Firebase response
-        auth_response = response.json()
-        user_id = auth_response["localId"]
-        id_token = auth_response["idToken"]
-
-        # Generate a session key
-        session_key = generate_session_key()
-
-        # Update Firestore with the new session key
-        user_ref = db.collection("accounts").document(user_id)
-        user_ref.update({"sessionKey": session_key})
-
-        # Fetch updated user data
-        updated_user_data = user_ref.get().to_dict()
-
-        # Return the session key and user info to the frontend
-        return jsonify({
-            "message": "Login successful",
-            "user": updated_user_data,
-            "sessionKey": session_key,
-            "idToken": id_token  # Optionally return the ID token
-        }), 200
-
-    except Exception as e:
-        print("Error during login:", e)
-        return jsonify({"error": "Failed to log in", "message": str(e)}), 500
 
 @app.route("/update-nutri-info", methods=["POST"])
 def update_nutri_info():
@@ -240,14 +215,18 @@ def update_nutri_info():
 
         # Update the NutriInfo field in Firestore
         user_ref = users_ref.document(user_doc.id)
-        user_ref.update({"NutriInfo": nutri_info})
+        user_ref.update({
+            "NutriInfo": nutri_info,
+            "infoGatheredInit" : True,
+            "infoGathered" : True,
+                         })
 
         # Fetch updated user data
         updated_user_data = user_ref.get().to_dict()
 
         return jsonify({
             "message": "NutriInfo updated successfully",
-            "user": updated_user_data
+            "user": updated_user_data,
         }), 200
 
     except Exception as e:
