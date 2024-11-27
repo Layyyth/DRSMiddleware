@@ -323,8 +323,8 @@ def reset_password():
         return jsonify({"error": "Failed to process password reset request", "message": str(e)}), 500
 
 
-@app.route("/info-gathered-false", methods=["POST"])
-def info_gathered_false():
+@app.route("/info-gathered-toggle", methods=["POST"])
+def info_gathered_toggle():
     try:
         data = request.json
         session_key = data.get("sessionKey")  # Expect the session key in the request body
@@ -344,23 +344,31 @@ def info_gathered_false():
         if not user_doc:
             return jsonify({"error": "Invalid session key"}), 401
 
-        # Update the infoGathered field in Firestore
+        # Fetch current user data
         user_ref = users_ref.document(user_doc.id)
+        user_data = user_doc.to_dict()
+
+        # Toggle the `infoGathered` field
+        current_status = user_data.get("infoGathered", False)
+        new_status = not current_status
+
+        # Update the `infoGathered` field in Firestore
         user_ref.update({
-            "infoGathered": False
+            "infoGathered": new_status
         })
 
         # Fetch updated user data
         updated_user_data = user_ref.get().to_dict()
 
         return jsonify({
-            "message": "infoGathered set to false successfully",
+            "message": "infoGathered toggled successfully",
+            "infoGathered": new_status,
             "user": updated_user_data
         }), 200
 
     except Exception as e:
-        print("Error updating infoGathered:", e)
-        return jsonify({"error": "Failed to update infoGathered", "message": str(e)}), 500
+        print("Error toggling infoGathered:", e)
+        return jsonify({"error": "Failed to toggle infoGathered", "message": str(e)}), 500
 
 
 
