@@ -296,6 +296,12 @@ def reset_password():
         if not email:
             return jsonify({"error": "Email is required"}), 400
 
+        # Check if the email exists in Firebase Authentication
+        try:
+            user = auth.get_user_by_email(email)
+        except auth.UserNotFoundError:
+            return jsonify({"error": "Email does not exist"}), 404
+
         # Firebase REST API Endpoint for sending password reset emails
         FIREBASE_PASSWORD_RESET_URL = "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key="
 
