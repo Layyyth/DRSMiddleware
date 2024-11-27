@@ -223,6 +223,66 @@ def update_nutri_info():
         print("Error updating NutriInfo:", e)
         return jsonify({"error": "Failed to update NutriInfo", "message": str(e)}), 500
 
+
+@app.route("/auth/login-with-pass", methods=["POST"])
+def login_user():
+    try:
+        data = request.json
+        email = data.get("email")
+        password = data.get("password")
+
+        if not email or not password:
+            return jsonify({"error": "Email and password are required"}), 400
+
+        # Firebase REST API Endpoint for password authentication
+        FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key="
+
+        # Firebase Web API Key (retrieved from your Firebase project settings)
+        FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY")
+        if not FIREBASE_WEB_API_KEY:
+            return jsonify({"error": "Firebase Web API Key is not configured"}), 500
+
+        # Make a POST request to Firebase Authentication REST API
+        auth_payload = {
+            "email": email,
+            "password": password,
+            "returnSecureToken": True
+        }
+
+        response = requests.post(FIREBASE_AUTH_URL + FIREBASE_WEB_API_KEY, json=auth_payload)
+
+        if response.status_code != 200:
+            # If Firebase REST API returns an error, pass it to the frontend
+            error_message = response.json().get("error", {}).get("message", "Authentication failed")
+            return jsonify({"error": "Invalid email or password", "details": error_message}), 401
+
+        # Parse the Firebase response
+        auth_response = response.json()
+        user_id = auth_response["localId"]
+        id_token = auth_response["idToken"]
+
+        # Generate a session key
+        session_key = generate_session_key()
+
+        # Update Firestore with the new session key
+        user_ref = db.collection("accounts").document(user_id)
+        user_ref.update({"sessionKey": session_key})
+
+        # Fetch updated user data
+        updated_user_data = user_ref.get().to_dict()
+
+        # Return the session key and user info to the frontend
+        return jsonify({
+            "message": "Login successful",
+            "user": updated_user_data,
+            "sessionKey": session_key,
+            "idToken": id_token  # Optionally return the ID token
+        }), 200
+
+    except Exception as e:
+        print("Error during login:", e)
+        return jsonify({"error": "Failed to log in", "message": str(e)}), 500
+
 @app.route("/auth/fetch-user", methods=["POST"])
 def fetch_user_data():
     try:
