@@ -283,6 +283,46 @@ def login_user():
         return jsonify({"error": "Failed to log in", "message": str(e)}), 500
 
 
+@app.route("/auth/reset-password", methods=["POST"])
+def reset_password():
+    """
+    Endpoint to send a password reset email to the user.
+    """
+    try:
+        # Get the email from the request body
+        data = request.json
+        email = data.get("email")
+
+        if not email:
+            return jsonify({"error": "Email is required"}), 400
+
+        # Firebase REST API Endpoint for sending password reset emails
+        FIREBASE_PASSWORD_RESET_URL = "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key="
+
+        # Firebase Web API Key (retrieved from your Firebase project settings)
+        FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY")
+        if not FIREBASE_WEB_API_KEY:
+            return jsonify({"error": "Firebase Web API Key is not configured"}), 500
+
+        # Make a POST request to Firebase to send the password reset email
+        payload = {
+            "requestType": "PASSWORD_RESET",
+            "email": email
+        }
+        response = requests.post(FIREBASE_PASSWORD_RESET_URL + FIREBASE_WEB_API_KEY, json=payload)
+
+        # Check the response status
+        if response.status_code == 200:
+            return jsonify({"message": "Password reset email sent successfully"}), 200
+        else:
+            error_message = response.json().get("error", {}).get("message", "Failed to send password reset email")
+            return jsonify({"error": "Failed to send password reset email", "details": error_message}), 400
+
+    except Exception as e:
+        print("Error during password reset:", e)
+        return jsonify({"error": "Failed to process password reset request", "message": str(e)}), 500
+
+
 @app.route("/info-gathered-false", methods=["POST"])
 def info_gathered_false():
     try:
