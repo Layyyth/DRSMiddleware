@@ -283,6 +283,48 @@ def login_user():
         print("Error during login:", e)
         return jsonify({"error": "Failed to log in", "message": str(e)}), 500
 
+
+@app.route("/info-gathered-false", methods=["POST"])
+def info_gathered_false():
+    try:
+        data = request.json
+        session_key = data.get("sessionKey")  # Expect the session key in the request body
+
+        if not session_key:
+            return jsonify({"error": "Session key is required"}), 400
+
+        # Query Firestore for the user with the given session key
+        users_ref = db.collection("accounts")
+        query = users_ref.where("sessionKey", "==", session_key).stream()
+
+        user_doc = None
+        for doc in query:
+            user_doc = doc
+            break
+
+        if not user_doc:
+            return jsonify({"error": "Invalid session key"}), 401
+
+        # Update the infoGathered field in Firestore
+        user_ref = users_ref.document(user_doc.id)
+        user_ref.update({
+            "infoGathered": False
+        })
+
+        # Fetch updated user data
+        updated_user_data = user_ref.get().to_dict()
+
+        return jsonify({
+            "message": "infoGathered set to false successfully",
+            "user": updated_user_data
+        }), 200
+
+    except Exception as e:
+        print("Error updating infoGathered:", e)
+        return jsonify({"error": "Failed to update infoGathered", "message": str(e)}), 500
+
+
+
 @app.route("/auth/fetch-user", methods=["POST"])
 def fetch_user_data():
     try:
