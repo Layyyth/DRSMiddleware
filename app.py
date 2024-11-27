@@ -213,7 +213,7 @@ def login_user():
         print("Error during login:", e)
         return jsonify({"error": "Failed to log in", "message": str(e)}), 500
 
-@app.route("/auth/update-nutri-info", methods=["POST"])
+@app.route("/update-nutri-info", methods=["POST"])
 def update_nutri_info():
     try:
         data = request.json
