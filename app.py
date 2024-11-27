@@ -1,3 +1,4 @@
+from http.client import NON_AUTHORITATIVE_INFORMATION
 from logging import exception
 import os
 import json
@@ -212,6 +213,46 @@ def login_user():
         print("Error during login:", e)
         return jsonify({"error": "Failed to log in", "message": str(e)}), 500
 
+@app.route("/auth/update-nutri-info", methods=["POST"])
+def update_nutri_info():
+    try:
+        data = request.json
+        session_key = data.get("sessionKey")  
+        nutri_info = data.get("NutriInfo")   
+
+        if not session_key:
+            return jsonify({"error": "Session key is required"}), 400
+
+        if not nutri_info:
+            return jsonify({"error": "NutriInfo data is required"}), 400
+
+        # Query Firestore for the user with the given session key
+        users_ref = db.collection("accounts")
+        query = users_ref.where("sessionKey", "==", session_key).stream()
+
+        user_doc = None
+        for doc in query:
+            user_doc = doc
+            break
+
+        if not user_doc:
+            return jsonify({"error": "Invalid session key"}), 401
+
+        # Update the NutriInfo field in Firestore
+        user_ref = users_ref.document(user_doc.id)
+        user_ref.update({"NutriInfo": nutri_info})
+
+        # Fetch updated user data
+        updated_user_data = user_ref.get().to_dict()
+
+        return jsonify({
+            "message": "NutriInfo updated successfully",
+            "user": updated_user_data
+        }), 200
+
+    except Exception as e:
+        print("Error updating NutriInfo:", e)
+        return jsonify({"error": "Failed to update NutriInfo", "message": str(e)}), 500
 
 # New Endpoint: Fetch user data by session key
 @app.route("/auth/fetch-user", methods=["POST"])
