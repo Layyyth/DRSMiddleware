@@ -55,7 +55,6 @@ def google_auth():
     )
     return redirect(auth_url)
 
-# Route to handle the callback from Google
 @app.route("/auth/google-callback", methods=["GET"])
 def google_callback():
     auth_code = request.args.get("code")
@@ -63,6 +62,8 @@ def google_callback():
         return jsonify({"error": "Authorization code not found."}), 400
 
     try:
+        print("Received auth code:", auth_code)
+        
         token_data = {
             "code": auth_code,
             "client_id": GOOGLE_CLIENT_ID,
@@ -70,44 +71,42 @@ def google_callback():
             "redirect_uri": REDIRECT_URI,
             "grant_type": "authorization_code",
         }
+        print("Token data:", token_data)
+
         token_response = requests.post(GOOGLE_TOKEN_URL, data=token_data)
         token_response.raise_for_status()
         tokens = token_response.json()
-        id_token = tokens.get("id_token")
+        print("Token response:", tokens)
 
+        id_token = tokens.get("id_token")
         if not id_token:
+            print("No ID Token in response")
             return jsonify({"error": "ID Token not received."}), 400
 
         decoded_token = verify_oauth2_token(id_token, Request())
+        print("Decoded token:", decoded_token)
+
         user_id = decoded_token.get("sub")
         user_email = decoded_token.get("email")
         user_name = decoded_token.get("name")
         user_picture = decoded_token.get("picture")
+        print(f"User info: {user_id}, {user_email}, {user_name}, {user_picture}")
 
         session_key = generate_session_key()
+        print("Generated session key:", session_key)
 
-        # Fetch user data from Firestore
-        user_ref = db.collection("accounts").document(user_id)
-        user_doc = user_ref.get()
-        if user_doc.exists():
-            # If user exists, update session key
-            user_data = user_doc.to_dict()
-            user_ref.update({"sessionKey": session_key})
-        else:
-            # Create new user if not exists
-            user_data = {
-                "uid": user_id,
-                "email": user_email,
-                "displayName": user_name,
-                "photoURL": user_picture,
-                "sessionKey": session_key,
-            }
-            user_ref.set(user_data)
+        user_data = {
+            "uid": user_id,
+            "email": user_email,
+            "displayName": user_name,
+            "photoURL": user_picture,
+            "sessionKey": session_key,
+        }
+        db.collection("accounts").document(user_id).set(user_data, merge=True)
+        print("User data saved to Firestore")
 
-        # Generate the redirect URL
         redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/?key={session_key}"
-
-        # Return the redirection
+        print("Redirecting to:", redirect_url)
         return redirect(redirect_url)
 
     except Exception as e:
