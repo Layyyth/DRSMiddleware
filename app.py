@@ -89,19 +89,10 @@ def google_callback():
         # Fetch user data from Firestore
         user_ref = db.collection("accounts").document(user_id)
         user_doc = user_ref.get()
-        if user_doc.exists:
-            # If user exists, check if NutriInfo is present
+        if user_doc.exists():
+            # If user exists, update session key
             user_data = user_doc.to_dict()
-            user_data["sessionKey"] = session_key  # Update session key
-            user_ref.update({"sessionKey": session_key})  # Save updated session key
-
-            # Redirect based on NutriInfo availability
-            if "NutriInfo" in user_data:
-                # NutriInfo exists, redirect to dashboard
-                redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/dashboard?key={session_key}"
-            else:
-                # NutriInfo missing, redirect to info page
-                redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/info?key={session_key}"
+            user_ref.update({"sessionKey": session_key})
         else:
             # Create new user if not exists
             user_data = {
@@ -112,9 +103,11 @@ def google_callback():
                 "sessionKey": session_key,
             }
             user_ref.set(user_data)
-            # Redirect to info page for new users
-            redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/info?key={session_key}"
 
+        # Generate the redirect URL
+        redirect_url = f"https://whippet-just-endlessly.ngrok-free.app/?key={session_key}"
+
+        # Return the redirection
         return redirect(redirect_url)
 
     except Exception as e:
@@ -145,16 +138,11 @@ def create_account():
                 user_data = user_doc.to_dict()
                 session_key = generate_session_key()
                 user_ref.update({"sessionKey": session_key})  # Update session key
-                if "NutriInfo" in user_data:
-                    # NutriInfo exists, redirect to dashboard
-                    return jsonify({
-                        "redirect": f"https://whippet-just-endlessly.ngrok-free.app/dashboard?key={session_key}"
-                    }), 200
-                else:
-                    # NutriInfo missing, redirect to info page
-                    return jsonify({
-                        "redirect": f"https://whippet-just-endlessly.ngrok-free.app/info?key={session_key}"
-                    }), 200
+                return jsonify({
+                    "message": "User already exists",
+                    "user": user_data,
+                    "sessionKey": session_key
+                }), 200
 
         except auth.UserNotFoundError:
             pass  # Continue to create the account if the user is not found
@@ -179,9 +167,11 @@ def create_account():
 
         db.collection("accounts").document(firebase_user.uid).set(user_data)
 
-        # Redirect to info page for new users
+        # Return sessionKey and user data to the frontend
         return jsonify({
-            "redirect": f"https://whippet-just-endlessly.ngrok-free.app/info?key={session_key}"
+            "message": "Account created successfully",
+            "user": user_data,
+            "sessionKey": session_key
         }), 201
 
     except Exception as e:
@@ -217,9 +207,9 @@ def update_nutri_info():
         user_ref = users_ref.document(user_doc.id)
         user_ref.update({
             "NutriInfo": nutri_info,
-            "infoGatheredInit" : True,
-            "infoGathered" : True,
-                         })
+            "infoGatheredInit": True,
+            "infoGathered": True,
+        })
 
         # Fetch updated user data
         updated_user_data = user_ref.get().to_dict()
@@ -233,7 +223,6 @@ def update_nutri_info():
         print("Error updating NutriInfo:", e)
         return jsonify({"error": "Failed to update NutriInfo", "message": str(e)}), 500
 
-# New Endpoint: Fetch user data by session key
 @app.route("/auth/fetch-user", methods=["POST"])
 def fetch_user_data():
     try:
