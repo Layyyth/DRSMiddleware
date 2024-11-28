@@ -155,6 +155,7 @@ def create_account():
             password=password,
         )
 
+
         # Create document in Firestore
         user_data = {
             "uid": firebase_user.uid,
@@ -162,13 +163,21 @@ def create_account():
             "displayName": name,
             "photoURL": photo_url,
             "sessionKey": session_key,  # Save session key to Firestore
+            "emailVerified": False,    # Initially set to False
         }
 
         db.collection("accounts").document(firebase_user.uid).set(user_data)
+    
+        # Generate email verification link
+        action_code_settings = {
+            "url": "https://whippet-just-endlessly.ngrok-free.app/?welcome=true",
+            "handleCodeInApp": True,
+        }
+        auth.generate_email_verification_link(email, action_code_settings)
 
         # Return sessionKey and user data to the frontend
         return jsonify({
-            "message": "Account created successfully",
+            "message": "Account created successfully. Please verify your email.",
             "user": user_data,
             "sessionKey": session_key
         }), 201
@@ -176,6 +185,7 @@ def create_account():
     except Exception as e:
         print("Error Creating Account", e)
         return jsonify({"error": "Failed to create account", "message": str(e)}), 500
+
 
 @app.route("/update-nutri-info", methods=["POST"])
 def update_nutri_info():
