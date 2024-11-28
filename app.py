@@ -177,7 +177,6 @@ def create_account():
         # Return sessionKey and user data to the frontend
         return jsonify({
             "message": "Account created successfully. Please verify your email.",
-            "user": user_data,
             "sessionKey": session_key
         }), 201
 
