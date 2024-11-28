@@ -404,8 +404,6 @@ def fetch_user_data():
         if not user_data:
             return jsonify({"error": "Invalid session key"}), 401
 
-        if not user_data.get("emailVerified", False):
-            return jsonify({"error": "User is not verified"}), 403
 
         # Return user data to the frontend
         return jsonify({"user": user_data}), 200
