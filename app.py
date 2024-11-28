@@ -162,22 +162,24 @@ def create_account():
             "displayName": name,
             "photoURL": photo_url,
             "sessionKey": session_key,  # Save session key to Firestore
+            "emailVerified": False,  # Default to False
         }
 
         db.collection("accounts").document(firebase_user.uid).set(user_data)
-         
 
         # Send email verification link
         action_code_settings = {
             "url": "https://whippet-just-endlessly.ngrok-free.app/?welcome=true",
             "handleCodeInApp": True,
         }
-        auth.generate_email_verification_link(email, action_code_settings)
+        verification_link = auth.generate_email_verification_link(email, action_code_settings)
 
-        # Return sessionKey and user data to the frontend
+        # Optionally, you can log or send this verification link for debugging.
+        print("Verification link sent:", verification_link)
+
+        # Return a response indicating the account was created and a verification email was sent
         return jsonify({
-            "message": "Account created successfully",
-            "user": user_data,
+            "message": "Account created successfully. Please verify your email.",
             "sessionKey": session_key
         }), 201
 
@@ -406,10 +408,18 @@ def fetch_user_data():
             return jsonify({"error": "Invalid session key"}), 401
 
         if not user_data.get("emailVerified", False):
-            return jsonify({"error": "User is not verified"}), 403
+            # Instead of returning 403, inform the frontend that the user is unverified
+            return jsonify({
+                "message": "User email is not verified. Please verify your email.",
+                "emailVerified": False,
+                "user": user_data
+            }), 200
 
-        # Return user data to the frontend
-        return jsonify({"user": user_data}), 200
+        # Return user data to the frontend if verified
+        return jsonify({
+            "user": user_data,
+            "emailVerified": True
+        }), 200
 
     except Exception as e:
         print("Error fetching user data:", e)
