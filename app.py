@@ -165,6 +165,14 @@ def create_account():
         }
 
         db.collection("accounts").document(firebase_user.uid).set(user_data)
+         
+
+        # Send email verification link
+        action_code_settings = {
+            "url": "https://whippet-just-endlessly.ngrok-free.app/?welcome=true",
+            "handleCodeInApp": True,
+        }
+        auth.generate_email_verification_link(email, action_code_settings)
 
         # Return sessionKey and user data to the frontend
         return jsonify({
@@ -395,6 +403,9 @@ def fetch_user_data():
 
         if not user_data:
             return jsonify({"error": "Invalid session key"}), 401
+
+        if not user_data.get("emailVerified", False):
+            return jsonify({"error": "User is not verified"}), 403
 
         # Return user data to the frontend
         return jsonify({"user": user_data}), 200
