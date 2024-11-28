@@ -139,6 +139,7 @@ def create_account():
                 user_ref.update({"sessionKey": session_key})  # Update session key
                 return jsonify({
                     "message": "User already exists",
+                    "user": user_data,
                     "sessionKey": session_key
                 }), 200
 
@@ -405,10 +406,6 @@ def fetch_user_data():
 
         if not user_data:
             return jsonify({"error": "Invalid session key"}), 401
-
-        # Check if the user is verified
-        if not user_data.get("verified", False):  # Default to False if the field is missing
-            return jsonify({"error": "User is not verified"}), 403
 
         # Return user data to the frontend
         return jsonify({"user": user_data}), 200
