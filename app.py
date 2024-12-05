@@ -517,7 +517,6 @@ def fetch_user_data():
             return jsonify({
                 "message": "User email is not verified. Please verify your email.",
                 "emailVerified": False,
-                "user": user_data
             }), 200
 
         # Return user data to the frontend if verified
