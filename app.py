@@ -231,41 +231,28 @@ def create_account():
 @app.route("/auth/verify-email", methods=["POST"])
 def verify_email():
     try:
-        # Get the action code (oobCode) from the request
         data = request.json
-        action_code = data.get("actionCode")
+        email = data.get("email")
         
-        if not action_code:
-            return jsonify({"error": "Action code is required"}), 400
+        if not email:
+            return jsonify({"error": "Email is required"}), 400
 
-        try:
-            # Use Firebase Admin SDK to apply the action code
-            auth.apply_action_code(action_code)  # Confirms the email verification
+        # Confirm the emailVerified status in Firebase Authentication
+        user = auth.get_user_by_email(email)
+        auth.update_user(user.uid, email_verified=True)
 
-            # Retrieve the user's email using the action code
-            decoded_info = auth.verify_id_token(action_code)  # Firebase requires this step
-            email = decoded_info.get("email")
+        # Update Firestore document
+        user_ref = db.collection("accounts").document(user.uid)
+        user_ref.update({
+            "emailVerified": True,
+            "verificationCompletedTimestamp": firestore.SERVER_TIMESTAMP
+        })
 
-            # Find the user in Firestore and mark them as verified
-            user = auth.get_user_by_email(email)
-            user_ref = db.collection("accounts").document(user.uid)
-            user_ref.update({
-                "emailVerified": True,
-                "verificationCompletedTimestamp": firestore.SERVER_TIMESTAMP
-            })
-
-            return jsonify({
-                "message": "Email successfully verified",
-                "email": email,
-                "emailVerified": True
-            }), 200
-
-        except Exception as verify_error:
-            print("Email verification error:", verify_error)
-            return jsonify({
-                "error": "Email verification failed",
-                "message": str(verify_error)
-            }), 400
+        return jsonify({
+            "message": "Email successfully verified",
+            "email": email,
+            "emailVerified": True
+        }), 200
 
     except Exception as e:
         print("Error in email verification process:", e)
@@ -273,6 +260,7 @@ def verify_email():
             "error": "Failed to process email verification",
             "message": str(e)
         }), 500
+
 
 @app.route("/update-nutri-info", methods=["POST"])
 def update_nutri_info():
