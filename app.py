@@ -198,8 +198,13 @@ def create_account():
             password=password,
         )
 
+        action_code_settings = {
+            "url": "https://whippet-just-endlessly.ngrok-free.app/verify",  # Frontend URL
+            "handleCodeInApp": True,  # Ensures the link is handled in your app
+        }
+
         # Generate email verification link
-        verification_link = auth.generate_email_verification_link(email)
+        verification_link = auth.generate_email_verification_link(email,action_code_settings)
 
         # Send email using Gmail SMTP
         send_verification_email(email, verification_link, name)
@@ -231,6 +236,7 @@ def create_account():
 @app.route("/auth/verify-email", methods=["POST"])
 def verify_email():
     try:
+        # Get the action code (oobCode) from the request
         data = request.json
         action_code = data.get("actionCode")
         
@@ -238,15 +244,15 @@ def verify_email():
             return jsonify({"error": "Action code is required"}), 400
 
         try:
-            # Verify the email verification action code
-            decoded_token = auth.verify_id_token(action_code)
-            email = decoded_token['email']
+            # Use Firebase Admin SDK to apply the action code
+            auth.apply_action_code(action_code)  # Confirms the email verification
 
-            # Confirm the email
+            # Retrieve the user's email using the action code
+            decoded_info = auth.verify_id_token(action_code)  # Firebase requires this step
+            email = decoded_info.get("email")
+
+            # Find the user in Firestore and mark them as verified
             user = auth.get_user_by_email(email)
-            auth.update_user(user.uid, email_verified=True)
-
-            # Update Firestore document
             user_ref = db.collection("accounts").document(user.uid)
             user_ref.update({
                 "emailVerified": True,
