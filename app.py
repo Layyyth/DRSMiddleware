@@ -198,13 +198,8 @@ def create_account():
             password=password,
         )
 
-        action_code_settings = {
-            "url": "https://whippet-just-endlessly.ngrok-free.app/verify",  # Frontend URL
-            "handleCodeInApp": True,  # Ensures the link is handled in your app
-        }
-
         # Generate email verification link
-        verification_link = auth.generate_email_verification_link(email,action_code_settings)
+        verification_link = auth.generate_email_verification_link(email)
 
         # Send email using Gmail SMTP
         send_verification_email(email, verification_link, name)
