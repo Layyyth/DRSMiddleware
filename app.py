@@ -155,12 +155,8 @@ def create_account():
             password=password,
         )
         
-        action_code_settings = {
-            "url": "https://whippet-just-endlessly.ngrok-free.app/?verified=true",
-            "handleCodeInApp": True,  # Firebase handles the action in the app
-        }
         # Send email verification immediately after user creation
-        verification_link = auth.generate_email_verification_link(email,action_code_settings)
+        verification_link = auth.generate_email_verification_link(email)
         
         print(f"Verification Link for {email}: {verification_link}")
 
