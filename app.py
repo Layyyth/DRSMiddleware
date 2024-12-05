@@ -231,50 +231,64 @@ def create_account():
 @app.route("/auth/verify-email", methods=["POST"])
 def verify_email():
     try:
+        # Get the action code from the request body
         data = request.json
-        action_code = data.get("actionCode")  # Extract oobCode from request
-        
+        action_code = data.get("actionCode")
+
         if not action_code:
             return jsonify({"error": "Action code is required"}), 400
 
-        # Verify the action code using Firebase Admin SDK
+        # Apply the action code to verify the email
         try:
-            # Get the user's email linked to the action code
-            email_info = auth.check_action_code(action_code)
-            email = email_info["email"]
+            # Firebase Admin SDK does not directly handle action codes; use the Firebase REST API
+            FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY")
+            if not FIREBASE_WEB_API_KEY:
+                raise ValueError("FIREBASE_WEB_API_KEY environment variable not set.")
 
-            # Confirm the emailVerified status in Firebase Authentication
+            verify_email_url = f"https://identitytoolkit.googleapis.com/v1/accounts:update?key={FIREBASE_WEB_API_KEY}"
+            payload = {
+                "oobCode": action_code
+            }
+
+            response = requests.post(verify_email_url, json=payload)
+            response_data = response.json()
+
+            if response.status_code != 200:
+                return jsonify({
+                    "error": "Email verification failed",
+                    "message": response_data.get("error", {}).get("message", "Unknown error")
+                }), 400
+
+            # Get the user's email from the response
+            email = response_data.get("email")
+
+            if not email:
+                return jsonify({"error": "Email not found in verification response"}), 400
+
+            # Update Firestore and mark email as verified
             user = auth.get_user_by_email(email)
             auth.update_user(user.uid, email_verified=True)
 
-            # Update Firestore document to mark the email as verified
             user_ref = db.collection("accounts").document(user.uid)
             user_ref.update({
                 "emailVerified": True,
                 "verificationCompletedTimestamp": firestore.SERVER_TIMESTAMP
             })
 
-            # If everything is successful, return a response
             return jsonify({
                 "message": "Email successfully verified",
                 "email": email,
                 "emailVerified": True
             }), 200
 
-        except auth.AuthError as e:
-            # Handle errors in action code validation
-            print("Error verifying action code:", e)
-            return jsonify({
-                "error": "Invalid or expired action code",
-                "message": str(e)
-            }), 400
+        except Exception as e:
+            print(f"Error applying action code: {e}")
+            return jsonify({"error": "Failed to process email verification", "message": str(e)}), 500
 
     except Exception as e:
-        print("Error in email verification process:", e)
-        return jsonify({
-            "error": "Failed to process email verification",
-            "message": str(e)
-        }), 500
+        print(f"Error in email verification process: {e}")
+        return jsonify({"error": "Failed to process email verification", "message": str(e)}), 500
+
 
 
 
