@@ -8,6 +8,9 @@ import requests
 from firebase_admin import credentials, initialize_app, firestore, auth
 from google.auth.transport.requests import Request
 from google.oauth2.id_token import verify_oauth2_token
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 app = Flask(__name__)
 
@@ -113,6 +116,47 @@ def google_callback():
         print("Error during Google callback:", e)
         return jsonify({"error": "Failed to authenticate with Google", "message": str(e)}), 500
 
+
+def send_verification_email(email, verification_link, name):
+    try:
+        # Gmail SMTP server setup
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 587
+        sender_email = "justgradproject25@gmail.com"  # Replace with your Gmail
+
+        # Fetch the app password from environment variables
+        sender_password = os.getenv("APP_PASSWORD")
+        if not sender_password:
+            raise ValueError("APP_PASSWORD environment variable not set.")
+
+        # Create the email content
+        message = MIMEMultipart("alternative")
+        message["Subject"] = "Verify Your Email"
+        message["From"] = sender_email
+        message["To"] = email
+
+        # Email body
+        html_content = f"""
+        <html>
+        <body>
+            <p>Hi {name},</p>
+            <p>Thank you for signing up! Please verify your email by clicking the link below:</p>
+            <a href="{verification_link}">Verify Email</a>
+            <p>If you didn't sign up, please ignore this email.</p>
+        </body>
+        </html>
+        """
+        message.attach(MIMEText(html_content, "html"))
+
+        # Connect to the Gmail SMTP server and send the email
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, email, message.as_string())
+        print(f"Verification email sent to {email}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
 @app.route("/auth/create-user", methods=["POST"])
 def create_account():
     try:
@@ -128,7 +172,6 @@ def create_account():
         # Check if the user already exists in Firebase Authentication
         try:
             existing_user = auth.get_user_by_email(email)
-            # Fetch the user's document
             user_ref = db.collection("accounts").document(existing_user.uid)
             user_doc = user_ref.get()
 
@@ -154,11 +197,12 @@ def create_account():
             email=email,
             password=password,
         )
-        
-        # Send email verification immediately after user creation
+
+        # Generate email verification link
         verification_link = auth.generate_email_verification_link(email)
-        
-        print(f"Verification Link for {email}: {verification_link}")
+
+        # Send email using Gmail SMTP
+        send_verification_email(email, verification_link, name)
 
         # Create document in Firestore
         user_data = {
@@ -171,7 +215,6 @@ def create_account():
             "verificationLinkSent": True,
             "verificationLinkTimestamp": firestore.SERVER_TIMESTAMP
         }
-
         db.collection("accounts").document(firebase_user.uid).set(user_data)
 
         return jsonify({
@@ -181,8 +224,9 @@ def create_account():
         }), 201
 
     except Exception as e:
-        print("Error Creating Account", e)
+        print("Error Creating Account:", e)
         return jsonify({"error": "Failed to create account", "message": str(e)}), 500
+
 
 @app.route("/auth/verify-email", methods=["POST"])
 def verify_email():
