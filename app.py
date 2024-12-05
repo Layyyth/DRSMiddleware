@@ -154,6 +154,15 @@ def create_account():
             email=email,
             password=password,
         )
+        
+        action_code_settings = {
+            "url": "https://whippet-just-endlessly.ngrok-free.app/?verified=true",
+            "handleCodeInApp": True,  # Firebase handles the action in the app
+        }
+        # Send email verification immediately after user creation
+        verification_link = auth.generate_email_verification_link(email,action_code_settings)
+        
+        print(f"Verification Link for {email}: {verification_link}")
 
         # Create document in Firestore
         user_data = {
@@ -161,31 +170,68 @@ def create_account():
             "email": email,
             "displayName": name,
             "photoURL": photo_url,
-            "sessionKey": session_key,  # Save session key to Firestore
-            "emailVerified": False,  # Default to False
+            "sessionKey": session_key,
+            "emailVerified": False,
+            "verificationLinkSent": True,
+            "verificationLinkTimestamp": firestore.SERVER_TIMESTAMP
         }
 
         db.collection("accounts").document(firebase_user.uid).set(user_data)
 
-        # Send email verification link
-        action_code_settings = {
-            "url": "https://whippet-just-endlessly.ngrok-free.app/?welcome=true",
-            "handleCodeInApp": True,
-        }
-        verification_link = auth.generate_email_verification_link(email, action_code_settings)
-
-        # Optionally, you can log or send this verification link for debugging.
-        print("Verification link sent:", verification_link)
-
-        # Return a response indicating the account was created and a verification email was sent
         return jsonify({
-            "message": "Account created successfully. Please verify your email.",
-            "sessionKey": session_key
+            "message": "Account created successfully. Please check your email to verify your account.",
+            "sessionKey": session_key,
+            "requiresEmailVerification": True
         }), 201
 
     except Exception as e:
         print("Error Creating Account", e)
         return jsonify({"error": "Failed to create account", "message": str(e)}), 500
+
+@app.route("/auth/verify-email", methods=["POST"])
+def verify_email():
+    try:
+        data = request.json
+        action_code = data.get("actionCode")
+        
+        if not action_code:
+            return jsonify({"error": "Action code is required"}), 400
+
+        try:
+            # Verify the email verification action code
+            decoded_token = auth.verify_id_token(action_code)
+            email = decoded_token['email']
+
+            # Confirm the email
+            user = auth.get_user_by_email(email)
+            auth.update_user(user.uid, email_verified=True)
+
+            # Update Firestore document
+            user_ref = db.collection("accounts").document(user.uid)
+            user_ref.update({
+                "emailVerified": True,
+                "verificationCompletedTimestamp": firestore.SERVER_TIMESTAMP
+            })
+
+            return jsonify({
+                "message": "Email successfully verified",
+                "email": email,
+                "emailVerified": True
+            }), 200
+
+        except Exception as verify_error:
+            print("Email verification error:", verify_error)
+            return jsonify({
+                "error": "Email verification failed",
+                "message": str(verify_error)
+            }), 400
+
+    except Exception as e:
+        print("Error in email verification process:", e)
+        return jsonify({
+            "error": "Failed to process email verification",
+            "message": str(e)
+        }), 500
 
 @app.route("/update-nutri-info", methods=["POST"])
 def update_nutri_info():
